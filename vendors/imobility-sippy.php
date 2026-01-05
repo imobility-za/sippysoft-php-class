@@ -187,15 +187,18 @@ class SippySoftClient {
     private $host;
     private $verify_ssl;
     private $transport;
+    private $verbose = false;
 
     /**
      * Initialize the client with a full URL containing embedded credentials.
      *
      * @param string $url Full URL with embedded credentials (e.g., "https://user:pass@host/xmlapi/xmlapi")
      * @param bool $verify_ssl Whether to verify SSL certificates
+     * @param bool $verbose Whether to enable verbose logging of XML requests/responses
      */
-    public function __construct($url, $verify_ssl = true) {
+    public function __construct($url, $verify_ssl = true, $verbose = false) {
         $this->verify_ssl = $verify_ssl;
+        $this->verbose = $verbose;
 
         $this->transport = new HTTPSDigestAuthTransport($url, $verify_ssl);
 
@@ -204,6 +207,23 @@ class SippySoftClient {
         $this->host = $parsed['host'] ?? $url;
 
         error_log("Initialized SippySoft client for host: {$this->host}");
+        if ($this->verbose) {
+            error_log("Verbose mode enabled - XML requests and responses will be logged");
+        }
+    }
+
+    /**
+     * Enable or disable verbose logging.
+     *
+     * @param bool $verbose Whether to enable verbose logging
+     */
+    public function setVerbose($verbose) {
+        $this->verbose = $verbose;
+        if ($this->verbose) {
+            error_log("Verbose mode enabled");
+        } else {
+            error_log("Verbose mode disabled");
+        }
     }
 
     /**
@@ -218,12 +238,27 @@ class SippySoftClient {
     private function call($method, $params = []) {
         $request_xml = $this->buildXmlRequest($method, $params[0] ?? []);
 
+        // Log request XML when verbose mode is enabled
+        if ($this->verbose) {
+            error_log("=== XML-RPC Request for method: {$method} ===");
+            error_log($request_xml);
+            error_log("=== End of Request ===");
+        }
+
         try {
             $response = $this->transport->makeRequest(
                 $this->host,
                 '/xmlapi/xmlapi',
-                $request_xml
+                $request_xml,
+                $this->verbose ? 1 : 0
             );
+
+            // Log response when verbose mode is enabled
+            if ($this->verbose) {
+                error_log("=== XML-RPC Response for method: {$method} ===");
+                error_log(json_encode($response, JSON_PRETTY_PRINT));
+                error_log("=== End of Response ===");
+            }
 
             return $response;
 
@@ -723,26 +758,96 @@ class SippySoftClient {
     }
 
     /**
-     * Create a new customer.
+     * Create a new customer on the SippySoft server.
      *
-     * @param string $name Customer's name
-     * @param string $web_password Password for web interface
-     * @param int $i_tariff Tariff ID
-     * @param array $additional_params Additional parameters
-     * @return array Creation result
+     * This application is used to create new customer. Newly created customer belongs to customer that authenticated a request.
+     * This function supports trusted mode in which case i_wholesaler (integer) parameter should be supplied.
+     *
+     * All required parameters must be provided in the $params array.
+     * 
+     * Required parameters (per SippySoft API documentation):
+     * - name: Customer's name (String) - Must be unique
+     * - web_password: Password to login to self-care interface (String)
+     * - i_tariff: Tariff (Integer) - Null value should be used to assign own tariff, otherwise the ID of the existing tariff available for this customer
+     *
+     * Optional parameters:
+     * - web_login: Login to access self-care web-interface (String)
+     * - i_routing_group: Routing group (Integer)
+     * - balance: Initial balance (Double)
+     * - credit_limit: Credit Limit (Double)
+     * - accounts_mgmt: Accounts management rights (Integer) - Bitmask: bit 0=can add, bit 1=can edit, bit 2=can delete
+     * - customers_mgmt: Customers management rights (Integer) - Bitmask: bit 0=can add, bit 1=can edit, bit 2=can delete
+     * - system_mgmt: System management rights (Integer)
+     * - accounts_matching_rule: Accounts matching rule (String)
+     * - company_name: Company Name (String)
+     * - salutation: Mr./Ms... (String)
+     * - first_name: First Name (String)
+     * - last_name: Last Name (String)
+     * - mid_init: M.I. (String)
+     * - street_addr: Address (String)
+     * - state: Province/State (String)
+     * - postal_code: Postal Code (String)
+     * - city: City (String)
+     * - country: Country/Region (String)
+     * - contact: Contact (String)
+     * - phone: Phone (String)
+     * - fax: Fax (String)
+     * - alt_phone: Alternative Phone (String)
+     * - alt_contact: Alternative Contact (String)
+     * - email: E-Mail (String)
+     * - cc: CC (String)
+     * - bcc: BCC (String)
+     * - mail_from: Mail's "From" header (String)
+     * - payment_currency: Payment Currency (String)
+     * - payment_method: Payments Preferred Method (Integer)
+     * - min_payment_amount: Payments Minimum Amount (Double)
+     * - api_access: If XMLAPI enabled (Integer)
+     * - api_password: Password to access XMLAPI (String)
+     * - api_mgmt: If customer can manage own his sub-customer's XMLAPI access (Integer)
+     * - i_commission_agent: i_customer of commission agent (Integer)
+     * - commission_size: Commission size in percents (Double)
+     * - tariffs_mgmt: Tariffs management rights (Integer) - Bitmask: bit 0=can add, bit 1=can edit, bit 2=can delete
+     * - max_depth: Max depth of subcustomers (Integer)
+     * - use_own_tariff: If customer can assign own tariff (Integer)
+     * - vouchers_mgmt: Vouchers management rights (Integer) - Bitmask: bit 0=can add, bit 1=can edit, bit 2=can delete
+     * - description: Description (String)
+     * - i_password_policy: Password Policy (Integer)
+     * - callshop_enabled: If callshop feature is enabled (Boolean)
+     * - overcommit_protection: If overcommit protection is enabled (Boolean)
+     * - overcommit_limit: Overcommit limit in percents (Double)
+     * - did_pool_enabled: If DIDs pool feature is enabled (Boolean)
+     * - ivr_apps_enabled: If IVR application feature is enabled (Boolean)
+     * - asr_acd_enabled: If customer can view ASR/ACD reports (Boolean)
+     * - debit_credit_cards_enabled: If customer can save debit/credit cards info (Boolean)
+     * - conferencing_enabled: If conferencing feature is enabled (Boolean)
+     * - share_payment_processors: If customer can share his payment processors (Boolean)
+     * - dncl_enabled: If DNCL lookup is enabled (Boolean)
+     * - i_time_zone: Time Zone (Integer) - Refer to Timezones List
+     * - i_lang: Two character language code (String) - e.g., 'en' for English, 'ru' for Russian. Refer to Languages List
+     * - i_export_type: Download Format (Integer) - Refer to Download Formats List
+     * - start_page: Start page on log in (Integer)
+     * - css: CSS stylesheet body for CSS branding (String)
+     * - dns_alias: DNS alias for CSS branding (String)
+     * - max_sessions: Concurrent calls limit for the customer (Integer) - nil field type with no data means Unlimited
+     * - max_calls_per_second: Call rate limit for the customer (Double) - nil field type with no data means Unlimited
+     * - i_wholesaler: Wholesaler ID for trusted mode (Integer)
+     *
+     * @param array $params All customer parameters (required and optional)
+     * @return array Creation result containing:
+     *               - result: "OK" if successful
+     *               - i_customer: ID of created customer (Integer)
      */
-    public function createCustomer($name, $web_password, $i_tariff, $additional_params = []) {
-        $params = array_merge([
-            'name' => $name,
-            'web_password' => $web_password,
-            'i_tariff' => $i_tariff
-        ], $additional_params);
-
+    public function createCustomer($params = []) {
         error_log("Creating customer with parameters: " . json_encode($params));
 
         $result = $this->call('createCustomer', [$params]);
-
-        error_log("Successfully created customer");
+        
+        // Validate the response contains customer creation data
+        if (is_array($result) && isset($result['i_customer'])) {
+            error_log("Successfully created customer with ID: " . $result['i_customer']);
+        } else {
+            error_log("Customer created, response: " . json_encode($result));
+        }
 
         return $result;
     }
