@@ -1094,7 +1094,7 @@ class SippySoftClient {
     /**
      * Update a DID.
      *
-     * Either i_did or did should be specified. At least one of the parameters must be updated.
+     * Either i_did or did should be specified in the params array. At least one update parameter must be provided.
      *
      * Note: To remove Account's assignment from DID, i_account should be supplied as null.
      * - If i_did is supplied in such call, i_ivr_application should be supplied as null too.
@@ -1108,45 +1108,31 @@ class SippySoftClient {
      *
      * Important: If did or did_range_end need to be updated, i_did must be provided.
      *
-     * @param int|null $i_did DID's Id
-     * @param string|null $did DID number
-     * @param string|null $did_range_end DID range end (since 2023)
-     * @param string|null $incoming_did Incoming DID number
-     * @param string|null $translation_rule Translation rule applied to DID
-     * @param string|null $cli_translation_rule CLI translation rule
-     * @param string|null $description Custom description
-     * @param int|null $i_ivr_application IVR application assigned to the DID
-     * @param int|null $i_account Account assigned to the DID
-     * @param int|null $i_dids_charging_group Selling charging group to be used
-     * @param int|null $i_vendor Vendor to authenticate this DID
-     * @param int|null $i_connection Connection to authenticate this DID
-     * @param int|null $buying_i_dids_charging_group Charging group to charge vendor
-     * @param string|null $incoming_cli Incoming CLI to match authentication rule (since 2020)
+     * @param array $params Associative array of parameters:
+     *                      - i_did: DID's Id (Integer, optional)
+     *                      - did: DID number (String, optional)
+     *                      - did_range_end: DID range end (String, optional, since 2023)
+     *                      - incoming_did: Incoming DID number (String, optional)
+     *                      - translation_rule: Translation rule applied to DID (String, optional)
+     *                      - cli_translation_rule: CLI translation rule (String, optional)
+     *                      - description: Custom description (String, optional)
+     *                      - i_ivr_application: IVR application assigned to the DID (Integer/null, optional - use null to remove)
+     *                      - i_account: Account assigned to the DID (Integer/null, optional - use null to remove)
+     *                      - i_dids_charging_group: Selling charging group to be used (Integer, optional)
+     *                      - i_vendor: Vendor to authenticate this DID (Integer, optional)
+     *                      - i_connection: Connection to authenticate this DID (Integer, optional)
+     *                      - buying_i_dids_charging_group: Charging group to charge vendor (Integer, optional)
+     *                      - incoming_cli: Incoming CLI to match authentication rule (String, optional, since 2020)
      * @return array A dictionary containing:
      *               - result: "OK" if successful
      *               - i_did: Id of updated DID (Integer)
      * @throws Exception If neither i_did nor did is specified, or if no update parameters provided
      */
-    public function updateDID($i_did = null, $did = null, $did_range_end = null, $incoming_did = null, $translation_rule = null, $cli_translation_rule = null, $description = null, $i_ivr_application = null, $i_account = null, $i_dids_charging_group = null, $i_vendor = null, $i_connection = null, $buying_i_dids_charging_group = null, $incoming_cli = null) {
-        if ($i_did === null && $did === null) {
+    public function updateDID($params = []) {
+        // Check if either i_did or did is specified
+        if (!isset($params['i_did']) && !isset($params['did'])) {
             throw new Exception("Either i_did or did must be specified");
         }
-
-        $params = [];
-        if ($i_did !== null) $params['i_did'] = $i_did;
-        if ($did !== null) $params['did'] = $did;
-        if ($did_range_end !== null) $params['did_range_end'] = $did_range_end;
-        if ($incoming_did !== null) $params['incoming_did'] = $incoming_did;
-        if ($translation_rule !== null) $params['translation_rule'] = $translation_rule;
-        if ($cli_translation_rule !== null) $params['cli_translation_rule'] = $cli_translation_rule;
-        if ($description !== null) $params['description'] = $description;
-        if ($i_ivr_application !== null) $params['i_ivr_application'] = $i_ivr_application;
-        if ($i_account !== null) $params['i_account'] = $i_account;
-        if ($i_dids_charging_group !== null) $params['i_dids_charging_group'] = $i_dids_charging_group;
-        if ($i_vendor !== null) $params['i_vendor'] = $i_vendor;
-        if ($i_connection !== null) $params['i_connection'] = $i_connection;
-        if ($buying_i_dids_charging_group !== null) $params['buying_i_dids_charging_group'] = $buying_i_dids_charging_group;
-        if ($incoming_cli !== null) $params['incoming_cli'] = $incoming_cli;
 
         // Check if at least one update parameter is provided (excluding identifier params)
         $update_params = array_diff_key($params, array_flip(['i_did', 'did', 'did_range_end']));
